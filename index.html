@@ -128,7 +128,16 @@ button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none
 /* historias */
 .story{display:flex;flex-direction:column;align-items:center;gap:22px;padding-top:6px}
 .scene{width:min(560px,92vw);min-height:250px;border-radius:32px;background:var(--card);border:3px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;font-size:min(26vw,130px);line-height:1;padding:20px;flex-wrap:wrap}
-.scene img{width:200px;height:200px;object-fit:cover;border-radius:22px}
+.scene img{max-width:100%;max-height:min(46vh,340px);width:auto;height:auto;object-fit:contain;border-radius:22px}
+.gtile img.cover{width:96px;height:96px;object-fit:cover;border-radius:18px}
+.sec{font-size:18px;font-weight:900;color:var(--soft);margin:22px 4px 10px}
+.thumb{width:64px;height:64px;object-fit:cover;border-radius:12px;flex:none}
+.thumbE{width:64px;height:64px;border-radius:12px;background:var(--bg);display:grid;place-items:center;font-size:30px;flex:none}
+.scrow{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px dashed var(--line)}
+.scrow .inp{padding:9px 12px}
+.scrow input.thumbE{width:64px;height:64px;flex:none;padding:0;font-size:28px}
+.scrow input[data-sdt]{flex:1;min-width:0}
+.prev{width:120px;height:120px;object-fit:cover;border-radius:16px;margin-top:10px}
 .stext{font-size:30px;font-weight:900;text-align:center;max-width:760px;line-height:1.3}
 .snav{display:flex;gap:16px;align-items:center}
 .snav .bigbtn{min-width:120px;font-size:32px;line-height:1}
@@ -346,7 +355,7 @@ const S = {
   days: {},            // 'YYYY-MM-DD' -> {date, trials:[], pictos:[]}
   diary: [],           // {id, ts, type, text, trigger, helped, level}
   screen:'home', cat:'necesito', strip:[], routineDone:{}, ptab:'resumen',
-  game:null, loaded:false, profiles:[], pid:'main',
+  game:null, loaded:false, mystories:[], imgs:{}, profiles:[], pid:'main',
 };
 S.cfg.routine = ['bano','comer','peluche','dormir'];
 
@@ -365,7 +374,8 @@ const median = arr=>{if(!arr.length)return 0;const s=arr.slice().sort((a,b)=>a-b
 const period = ts=>{const h=new Date(ts).getHours();return h<12?'mañana':h<16?'mediodía':h<21?'tarde':'noche'};
 const fmtDate = ts=>{const d=new Date(ts);return d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric',month:'short'})+' · '+pad(d.getHours())+':'+pad(d.getMinutes())};
 function lsGet(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch(e){return null}}
-function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+let quotaWarned=false;
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){if(!quotaWarned){quotaWarned=true;setTimeout(()=>toast('⚠️ No queda espacio para guardar. Borra fotos o datos antiguos.'),0)}return false}}
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
 function allPictos(){return PICTOS.concat(S.custom.map(c=>({id:c.id,w:c.w,img:c.img,cat:'mio'})))}
 function pictoById(id){return allPictos().find(p=>p.id===id)}
@@ -398,16 +408,34 @@ function chime(){
 }
 
 /* ============ GUARDADO (almacenamiento local del dispositivo) ============ */
+// Las fotos grandes (historias propias) van en IndexedDB; el resto en localStorage.
+const IDB={db:null,
+  open(){return new Promise(res=>{try{const r=indexedDB.open('comprentea',1);r.onupgradeneeded=()=>r.result.createObjectStore('imgs');r.onsuccess=()=>{this.db=r.result;res(true)};r.onerror=()=>res(false)}catch(e){res(false)}})},
+  tx(mode){return this.db.transaction('imgs',mode).objectStore('imgs')},
+  put(k,v){return new Promise(res=>{if(!this.db)return res(false);try{const t=this.db.transaction('imgs','readwrite');t.objectStore('imgs').put(v,k);t.oncomplete=()=>res(true);t.onerror=()=>res(false)}catch(e){res(false)}})},
+  del(k){return new Promise(res=>{if(!this.db)return res(false);try{const t=this.db.transaction('imgs','readwrite');t.objectStore('imgs').delete(k);t.oncomplete=()=>res(true);t.onerror=()=>res(false)}catch(e){res(false)}})},
+  all(){return new Promise(res=>{const out={};if(!this.db)return res(out);try{const rq=this.tx('readonly').openCursor();rq.onsuccess=()=>{const c=rq.result;if(c){out[c.key]=c.value;c.continue()}else res(out)};rq.onerror=()=>res(out)}catch(e){res(out)}})},
+};
+function imgSrc(v){if(!v)return '';return v.startsWith('data:')?v:(S.imgs[v]||'')}
+async function saveImg(dataUrl){const k='img'+uid();if(await IDB.put(k,dataUrl)){S.imgs[k]=dataUrl;return k}return dataUrl}
+async function dropImg(v){if(v&&!v.startsWith('data:')){delete S.imgs[v];await IDB.del(v)}}
+function readImage(file,max,square){return new Promise((res,rej)=>{const img=new Image(),url=URL.createObjectURL(file);
+  img.onload=()=>{let w=img.width,h=img.height,sx=0,sy=0,sw=w,sh=h;
+    if(square){const m=Math.min(w,h);sx=(w-m)/2;sy=(h-m)/2;sw=sh=m;w=h=max}else{const k=Math.min(1,max/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k)}
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,sx,sy,sw,sh,0,0,w,h);URL.revokeObjectURL(url);res(cv.toDataURL('image/jpeg',.78))};
+  img.onerror=()=>{URL.revokeObjectURL(url);rej()};img.src=url})}
 const AVATARS=['🧒','👧','👦','🧑','👩','👨','🐶','🐱','🦁','🐼','🦄','🚀','⚽','🌸','🌟','🐸','🦖','🎨'];
 function P(){return S.profiles.find(p=>p.id===S.pid)||S.profiles[0]}
 function pname(){const p=P();return (p&&p.name)||''}
 const KEYS={common:'comprentea-common',active:'comprentea-active',profile:pid=>pid==='main'?'comprentea-v1':'comprentea-'+pid};
 const Store = {
   timer:null,
-  cacheLocal(){lsSet(KEYS.profile(S.pid),{cfg:S.cfg,days:S.days,diary:S.diary});lsSet(KEYS.common,{custom:S.custom,profiles:S.profiles})},
+  cacheLocal(){lsSet(KEYS.profile(S.pid),{cfg:S.cfg,days:S.days,diary:S.diary});lsSet(KEYS.common,{custom:S.custom,profiles:S.profiles,mystories:S.mystories})},
   async init(){
     const common=lsGet(KEYS.common),legacy=lsGet(KEYS.profile('main'));
     S.custom=(common&&common.custom)||(legacy&&legacy.custom)||[];
+    S.mystories=(common&&common.mystories)||[];
+    await IDB.open();S.imgs=await IDB.all();
     S.profiles=(common&&common.profiles&&common.profiles.length)?common.profiles:[{id:'main',name:(legacy&&legacy.cfg&&legacy.cfg.childName)||'',av:'🧒'}];
     S.pid=lsGet(KEYS.active)||'main';
     if(!S.profiles.find(p=>p.id===S.pid))S.pid=S.profiles[0].id;
@@ -436,7 +464,7 @@ async function switchProfile(pid,screen='home'){
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')Store.flushAll()});
 
 /* ============ NAVEGACIÓN ============ */
-function go(screen,extra){if(S.screen==='story'&&screen!=='story')stopStory();S.screen=screen;if(extra)Object.assign(S,extra);if(screen!=='game'&&S.game){clearTimeout(S.game.idle);S.game=null}render();window.scrollTo(0,0)}
+function go(screen,extra){if(S.screen==='story'&&screen!=='story'){stopStory();S.mystories=S.mystories.filter(m=>m.id!=='__draft')}S.screen=screen;if(extra)Object.assign(S,extra);if(screen!=='game'&&S.game){clearTimeout(S.game.idle);S.game=null}render();window.scrollTo(0,0)}
 function backBtn(to='home'){return `<button class="iconbtn" data-go="${to}" aria-label="Volver">⬅️</button>`}
 function render(){
   const app=$('#app');
@@ -705,16 +733,84 @@ const STORIES = [
     ['😨','Cuando algo es nuevo o hace ruido, puedo tener miedo.'],
     ['🗣️👩','Puedo enseñar cómo me siento con mis dibujos.'],
     ['🤗','Mamá y papá me ayudan con lo que siento.']]},
+  {id:'pegar',e:'😠',cat:'conducta',name:'Cuando me enfado, no pego',pages:[
+    ['😠','A veces me enfado mucho.'],
+    ['💛','Enfadarse está bien. Todos nos enfadamos a veces.'],
+    ['✋','Pero no pego. Pegar hace daño.'],
+    ['🧒😢','Si pego, el otro niño llora. Le duele.'],
+    ['🛑','Cuando me enfado, paro.'],
+    ['🌸🕯️','Respiro despacio: huelo la flor y soplo la vela.'],
+    ['🧸💪','Puedo apretar mi peluche o pisar fuerte el suelo.'],
+    ['🙋','Puedo pedir ayuda a mamá, a papá o a la profe.'],
+    ['🤗','Así me calmo y todos estamos bien.']]},
+  {id:'morder',e:'🦷',cat:'conducta',name:'No muerdo',pages:[
+    ['😬','A veces tengo ganas de morder.'],
+    ['🦷🍎','Los dientes son para comer.'],
+    ['🙅','No muerdo a las personas. Morder hace daño.'],
+    ['🧸','Si tengo ganas de morder, pido mi mordedor.'],
+    ['🥕','O como algo crujiente, como una zanahoria.'],
+    ['😊','Así todos estamos contentos y tranquilos.']]},
+  {id:'turno',e:'⏳',cat:'conducta',name:'Espero mi turno',pages:[
+    ['🌳🧒🧒','En el parque hay muchos niños que quieren jugar.'],
+    ['🧍🧍','A veces tengo que esperar.'],
+    ['⏳','Esperar es difícil, pero puedo hacerlo.'],
+    ['🔢','Mientras espero, cuento: uno, dos, tres…'],
+    ['👉🧒','¡Ahora es mi turno!'],
+    ['😊','Cuando espero, todos pueden jugar.']]},
+  {id:'compartir',e:'🤝',cat:'conducta',name:'Compartir juguetes',pages:[
+    ['🚗','Tengo un coche. ¡Me gusta mucho!'],
+    ['🧒','Otro niño quiere jugar con mi coche.'],
+    ['🗣️','Él me pide: ¿me lo dejas?'],
+    ['⏱️','Puedo dejárselo un ratito.'],
+    ['🔄','Después me lo devuelve. ¡Es mi turno otra vez!'],
+    ['🤝😊','Compartir es divertido. Jugamos juntos.']]},
+  {id:'dientes',e:'🦷',cat:'rutinas',name:'Lavarme los dientes',pages:[
+    ['🌙🦷','Antes de dormir me lavo los dientes.'],
+    ['🧴','Pongo un poco de pasta en el cepillo.'],
+    ['🦷✨','Cepillo arriba y abajo, despacio.'],
+    ['🎵','Mientras cepillo, puedo cantar una canción.'],
+    ['💧','Escupo la pasta y me enjuago.'],
+    ['😁','¡Dientes limpios y brillantes!']]},
+  {id:'medico',e:'🩺',cat:'salidas',name:'Ir al médico',pages:[
+    ['🏥','Hoy vamos al médico.'],
+    ['🪑⏳','Primero esperamos en la sala. Puedo llevar mi juguete.'],
+    ['👩‍⚕️','La médica me saluda. Ella me cuida.'],
+    ['🩺','Escucha mi corazón con un aparato. Está fresquito.'],
+    ['👂','Me mira los oídos y la boca. No duele.'],
+    ['🤗','Mamá o papá están conmigo todo el rato.'],
+    ['🏠😊','¡Terminamos! Volvemos a casa.']]},
+  {id:'pelo',e:'✂️',cat:'salidas',name:'Cortarme el pelo',pages:[
+    ['💈','Hoy vamos a cortarme el pelo.'],
+    ['🪑','Me siento en una silla especial.'],
+    ['🧣','Me ponen una capa para no mancharme.'],
+    ['✂️','Las tijeras hacen ris, ras. No duele.'],
+    ['🎧','Si el ruido me molesta, uso mis auriculares.'],
+    ['🪞😊','¡Listo! Me miro en el espejo.']]},
+  {id:'cambios',e:'🔄',cat:'emociones',name:'Cuando los planes cambian',pages:[
+    ['📋','Tenía un plan para hoy.'],
+    ['🌧️','Pero a veces los planes cambian. Hoy llueve.'],
+    ['😟','Me puedo sentir triste o nervioso. Está bien.'],
+    ['🍃','Respiro despacio.'],
+    ['🏠🧩','Mamá o papá me dicen el plan nuevo: hoy jugamos en casa.'],
+    ['📅','El otro plan lo haremos otro día.'],
+    ['😊','Los cambios a veces también son divertidos.']]},
 ];
+STORIES.forEach(s=>{if(!s.cat)s.cat=['manos','dientes'].includes(s.id)?'rutinas':['cole'].includes(s.id)?'salidas':['empujar'].includes(s.id)?'conducta':'emociones'});
+const STORY_CATS=[['mias','📷 Mis historias'],['conducta','🤝 Convivir'],['emociones','💛 Emociones'],['rutinas','🛁 Rutinas'],['salidas','🚗 Salidas']];
+function normPage(p){return Array.isArray(p)?{s:p[0],t:p[1]}:p}
+function allStories(){return STORIES.concat(S.mystories.map(m=>Object.assign({cat:'mias'},m)))}
+function storyCover(st){const p0=normPage(st.pages[0]||{});return p0&&p0.img&&imgSrc(p0.img)?`<img class="cover" src="${imgSrc(p0.img)}" alt="">`:`<span class="big">${st.e}</span>`}
 function vStories(){
+  const all=allStories();
   return `<div class="top">${backBtn()}<h1>Historias</h1></div>
-  <div class="games">${STORIES.map(st=>`<button class="gtile t-sky" data-st="${st.id}"><span class="big">${st.e}</span>${st.name}<small>▶ ${st.pages.length} escenas</small></button>`).join('')}</div>`;
+  ${STORY_CATS.map(([c,label])=>{const list=all.filter(s=>s.cat===c);if(!list.length)return '';
+    return `<div class="sec">${label}</div><div class="games">${list.map(st=>`<button class="gtile ${c==='mias'?'t-teal':'t-sky'}" data-st="${st.id}">${storyCover(st)}${esc(st.name)}<small>▶ ${st.pages.length} escenas</small></button>`).join('')}</div>`}).join('')}`;
 }
 function bStories(){$$('[data-st]').forEach(b=>b.onclick=()=>{
   S.story={id:b.dataset.st,page:0,playing:S.cfg.storyAuto!==false,tok:0,ended:false};
   today().stories=today().stories||[];today().stories.push({id:b.dataset.st,ts:Date.now()});Store.saveDay();
   go('story');setTimeout(playPage,400)})}
-function curStory(){return STORIES.find(x=>x.id===(S.story||{}).id)}
+function curStory(){return allStories().find(x=>x.id===(S.story||{}).id)}
 function graphemes(s){try{return Array.from(new Intl.Segmenter('es',{granularity:'grapheme'}).segment(s),x=>x.segment)}catch(e){return Array.from(s)}}
 function speakThen(text,cb){
   let done=false;const est=1300+text.length*80/(S.cfg.rate||1);
@@ -728,7 +824,7 @@ function stopStory(){if(S.story){S.story.tok++;clearTimeout(S.story.timer)}try{s
 function playPage(){
   const s=S.story,st=curStory();if(!s||!st||S.screen!=='story')return;
   const tok=++s.tok;clearTimeout(s.timer);
-  speakThen(st.pages[s.page][1],()=>{
+  speakThen(normPage(st.pages[s.page]).t,()=>{
     if(!S.story||S.story.tok!==tok||!S.story.playing||S.screen!=='story')return;
     s.timer=setTimeout(()=>{
       if(!S.story||S.story.tok!==tok||!S.story.playing)return;
@@ -744,28 +840,28 @@ function vStory(){
     <div class="done"><div class="stars">${st.e}</div><h2>¡Fin!</h2>
     <div class="btnrow"><button class="bigbtn" id="sagain">🔁 Ver otra vez</button><button class="bigbtn alt" data-go="stories">📖 Otra historia</button></div></div>`;
   }
-  const i=s.page,[scene,text]=st.pages[i];
-  const pieces=graphemes(scene).filter(g=>g.trim());
+  const i=s.page,pg=normPage(st.pages[i]),text=pg.t;
+  const pieces=(pg.img&&imgSrc(pg.img)?[`<img src="${imgSrc(pg.img)}" alt="">`]:[]).concat(graphemes(pg.s||'').filter(g=>g.trim()));
   const pct=Math.round(100*(i+1)/st.pages.length);
-  return `<div class="top">${backBtn('stories')}<h1>${st.name}</h1><button class="iconbtn" id="srep" aria-label="Repetir escena">🔊</button></div>
+  return `<div class="top">${backBtn(st.id==='__draft'?'parent':'stories')}<h1>${esc(st.name)}</h1><button class="iconbtn" id="srep" aria-label="Repetir escena">🔊</button></div>
   <div class="story">
     <div class="scene kb" key="${i}">${pieces.map((g,j)=>`<span class="pop" style="animation-delay:${.15+j*.55}s">${g}</span>`).join('')}</div>
-    <div class="stext fadein">${esc(text)}</div>
+    <div class="stext fadein" key="${i}">${esc(text)}</div>
     <div class="sbar"><i style="width:${pct}%"></i></div>
     <div class="snav">
-      <button class="bigbtn alt" id="sprev" ${i===0?'style="visibility:hidden"':''} aria-label="Escena anterior">⏮</button>
-      <button class="bigbtn" id="splay" aria-label="${s.playing?'Pausa':'Reproducir'}">${s.playing?'⏸':'▶'}</button>
-      <button class="bigbtn alt" id="snext" aria-label="Escena siguiente">⏭</button>
+      <button class="bigbtn alt" id="sprev" ${i===0?'style="visibility:hidden"':''} aria-label="Escena anterior">⏮️</button>
+      <button class="bigbtn" id="splay" aria-label="${s.playing?'Pausa':'Reproducir'}">${s.playing?'⏸️':'▶️'}</button>
+      <button class="bigbtn alt" id="snext" aria-label="Escena siguiente">⏭️</button>
     </div>
   </div>`;
 }
 function bStory(){
   const s=S.story,st=curStory();
   const a=$('#sagain');if(a){a.onclick=()=>{s.page=0;s.ended=false;s.playing=true;render();playPage()};return}
-  $('#srep').onclick=()=>{s.playing=false;stopStory();render();speak(st.pages[s.page][1])};
+  $('#srep').onclick=()=>{s.playing=false;stopStory();render();speak(normPage(st.pages[s.page]).t)};
   $('#splay').onclick=()=>{s.playing=!s.playing;if(s.playing){render();playPage()}else{stopStory();render()}};
-  $('#snext').onclick=()=>{stopStory();if(s.page<st.pages.length-1){s.page++;render();if(s.playing)playPage();else speak(st.pages[s.page][1])}else{s.ended=true;s.playing=false;render()}};
-  const p=$('#sprev');if(p)p.onclick=()=>{stopStory();if(s.page>0){s.page--;render();if(s.playing)playPage();else speak(st.pages[s.page][1])}};
+  $('#snext').onclick=()=>{stopStory();if(s.page<st.pages.length-1){s.page++;render();if(s.playing)playPage();else speak(normPage(st.pages[s.page]).t)}else{s.ended=true;s.playing=false;render()}};
+  const p=$('#sprev');if(p)p.onclick=()=>{stopStory();if(s.page>0){s.page--;render();if(s.playing)playPage();else speak(normPage(st.pages[s.page]).t)}};
 }
 
 /* ============ ANÁLISIS ============ */
@@ -817,9 +913,9 @@ function diaryPatterns(days=30){
 
 /* ============ ÁREA DE PADRES ============ */
 function vParent(){
-  const tabs=[['resumen','📊 Resumen'],['juegos','🧩 Juegos'],['diario','📓 Diario'],['ajustes','⚙️ Ajustes'],['usuarios','👥 Usuarios']];
+  const tabs=[['resumen','📊 Resumen'],['juegos','🧩 Juegos'],['diario','📓 Diario'],['ajustes','⚙️ Ajustes'],['usuarios','👥 Usuarios'],['historias','📖 Mis historias']];
   const st='📱 Los datos se guardan solo en este dispositivo. Haz una copia de seguridad de vez en cuando (Ajustes).';
-  const body=({resumen:pResumen,juegos:pJuegos,diario:pDiario,ajustes:pAjustes,usuarios:pUsuarios}[S.ptab]||pResumen)();
+  const body=({resumen:pResumen,juegos:pJuegos,diario:pDiario,ajustes:pAjustes,usuarios:pUsuarios,historias:pHistorias}[S.ptab]||pResumen)();
   return `<div class="top">${backBtn()}<h1>Padres</h1><button class="btn alt sm" id="report">📄 Informe</button></div>
     <div class="status" style="margin:-6px 0 12px">${st}</div>
     <div class="checks" style="margin-bottom:14px;align-items:center"><span class="muted">Viendo a:</span>${S.profiles.map(p=>`<button class="ck ${p.id===S.pid?'on':''}" data-pp="${p.id}">${p.av} ${esc(p.name||'Sin nombre')}</button>`).join('')}</div>
@@ -859,7 +955,7 @@ function storiesHTML(){
   const SV=Object.values(S.days).flatMap(d=>d.stories||[]).filter(x=>x.ts>=Date.now()-30*864e5);
   if(!SV.length)return '<p class="muted">Aún no ha visto historias.</p>';
   const sc={};SV.forEach(x=>{sc[x.id]=(sc[x.id]||0)+1});
-  return Object.entries(sc).sort((a,b)=>b[1]-a[1]).map(([id,n])=>{const st=STORIES.find(y=>y.id===id);return `<div class="row"><span>${st?st.e+' '+esc(st.name):esc(id)}</span><span class="r">${n}</span></div>`}).join('');
+  return Object.entries(sc).sort((a,b)=>b[1]-a[1]).map(([id,n])=>{const st=allStories().find(y=>y.id===id);return `<div class="row"><span>${st?st.e+' '+esc(st.name):esc(id)}</span><span class="r">${n}</span></div>`}).join('');
 }
 function patternsHTML(dp){
   if(!dp.E.length)return '<p class="muted">Apunta en el Diario lo que observes (vídeos que repite, crisis, sonidos nuevos…) y aquí verás qué se repite.</p>';
@@ -937,12 +1033,13 @@ function pAjustes(){
     <div class="pick">${allPictos().map(p=>`<button data-radd="${p.id}">${pictoFace(p)}<span>${esc(p.w)}</span></button>`).join('')}</div>
   </div>
   <div class="card"><h3>📷 Mis fotos</h3><div class="sub">Fotos reales (mamá, su vaso, su peluche…). Suelen entenderse mejor que los dibujos.</div>
-    <label class="f">Nombre</label><input class="inp" id="phname" placeholder="ej. mamá, mi vaso">
-    <label class="f">Foto</label><input class="inp" type="file" accept="image/*" id="phfile">
+    <label class="f">Nombre</label><input class="inp" id="phname" placeholder="ej. mamá, mi vaso" value="${esc(photoDraft.name)}">
+    <label class="f">Foto</label>${pickButtons('ph')}
+    ${photoDraft.img?`<img class="prev" src="${photoDraft.img}" alt="">`:''}
     <div style="margin-top:10px"><button class="btn" id="phadd">Añadir foto</button></div>
     <div class="pick" style="margin-top:12px">${S.custom.map(p=>`<button data-phdel="${p.id}"><img src="${p.img}" alt=""><span>${esc(p.w)} ✕</span></button>`).join('')}</div>
   </div>
-  <div class="card"><h3>💾 Copia de seguridad</h3><div class="sub">Guarda todos los usuarios, resultados, diarios y fotos en un archivo. Sirve para pasarlo a otro móvil o tablet.</div>
+  <div class="card"><h3>💾 Copia de seguridad</h3><div class="sub">Guarda todos los usuarios, resultados, diarios, fotos e historias propias en un archivo. Sirve para pasarlo a otro móvil o tablet.</div>
     <div class="btnrow" style="justify-content:flex-start"><button class="btn" id="bkExport">⬇️ Descargar copia</button>
     <label class="btn alt" style="cursor:pointer">⬆️ Restaurar copia<input type="file" accept=".json,application/json" id="bkImport" hidden></label></div></div>
   <div class="card"><h3>🗑️ Datos</h3><div class="sub">Borra los resultados de juegos y el diario de ${esc(pname()||'este usuario')} (no borra ajustes ni fotos).</div>
@@ -979,6 +1076,7 @@ function bParent(){
       S.diary.unshift(e);S.diary.sort((a,b)=>b.ts-a.ts);Store.saveDiary(e);draft={type:draft.type,text:'',trigger:'',helped:'',level:2};toast('Guardado ✓');keep()};
     $$('[data-del]').forEach(b=>b.onclick=()=>confirmBox('¿Borrar esta nota?',()=>{const id=b.dataset.del;S.diary=S.diary.filter(e=>e.id!==id);Store.delDiary(id);keep()}));
   }
+  if(S.ptab==='historias')bHistorias(keep);
   if(S.ptab==='usuarios'){
     const rd=()=>{const i=$('#nuName');if(i)newU.name=i.value};
     $$('[data-nav]').forEach(b=>b.onclick=()=>{rd();newU.av=b.dataset.nav;keep()});
@@ -1008,6 +1106,7 @@ function bParent(){
     $$('[data-rdel]').forEach(b=>b.onclick=()=>{c.routine.splice(+b.dataset.rdel,1);save()});
     $$('[data-radd]').forEach(b=>b.onclick=()=>{if(c.routine.length>=8){toast('Máximo 8 pasos');return}c.routine.push(b.dataset.radd);save()});
     $('#phadd').onclick=addPhoto;
+    bindPick('ph',async f=>{try{photoDraft.name=$('#phname').value;photoDraft.img=await readImage(f,220,true);keep()}catch(e){toast('No se pudo leer la imagen')}});
     const bx=$('#bkExport');if(bx)bx.onclick=exportBackup;
     const bi=$('#bkImport');if(bi)bi.onchange=()=>{const f=bi.files[0];if(f)importBackup(f)};
     $$('[data-phdel]').forEach(b=>b.onclick=()=>confirmBox('¿Quitar esta foto?',()=>{const id=b.dataset.phdel;S.custom=S.custom.filter(p=>p.id!==id);c.routine=c.routine.filter(r=>r!==id);Store.savePictos();Store.saveCfg();keep()}));
@@ -1015,20 +1114,80 @@ function bParent(){
   }
 }
 function readDraft(){const t=$('#dtext');if(t)draft.text=t.value;const tr=$('#dtrig');if(tr)draft.trigger=tr.value;const h=$('#dhelp');if(h)draft.helped=h.value}
+let photoDraft={name:'',img:null};
+function pickButtons(pre){return `<div class="btnrow" style="justify-content:flex-start">
+  <label class="btn alt" style="cursor:pointer">🖼️ Galería<input type="file" accept="image/*" id="${pre}Gal" hidden></label>
+  <label class="btn alt" style="cursor:pointer">📷 Cámara<input type="file" accept="image/*" capture="environment" id="${pre}Cam" hidden></label></div>`}
+function bindPick(pre,cb){[pre+'Gal',pre+'Cam'].forEach(id=>{const i=document.getElementById(id);if(i)i.onchange=()=>{const f=i.files&&i.files[0];if(f)cb(f);i.value=''}})}
 function addPhoto(){
-  const name=$('#phname').value.trim(),f=$('#phfile').files[0];
-  if(!name||!f){toast('Pon un nombre y elige una foto');return}
+  const name=$('#phname').value.trim();
+  if(!name||!photoDraft.img){toast('Elige una foto y ponle un nombre');return}
   if(S.custom.length>=24){toast('Máximo 24 fotos');return}
-  const img=new Image(),url=URL.createObjectURL(f);
-  img.onload=()=>{const s=220,cv=document.createElement('canvas');cv.width=s;cv.height=s;const ctx=cv.getContext('2d');
-    const m=Math.min(img.width,img.height);ctx.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,s,s);URL.revokeObjectURL(url);
-    const data=cv.toDataURL('image/jpeg',.72);S.custom.push({id:'c'+uid(),w:name,img:data});Store.savePictos();toast('Foto añadida ✓');
-    const y=window.scrollY;render();window.scrollTo(0,y)};
-  img.onerror=()=>{URL.revokeObjectURL(url);toast('No se pudo leer la imagen')};img.src=url;
+  S.custom.push({id:'c'+uid(),w:name,img:photoDraft.img});photoDraft={name:'',img:null};Store.savePictos();toast('Foto añadida ✓');
+  const y=window.scrollY;render();window.scrollTo(0,y);
+}
+/* ---------- Editor de historias propias ---------- */
+const STORY_ICONS=['📖','🏠','🏫','🚗','🚌','🛁','🍽️','🎂','🏥','✂️','🛒','🌳','👵','✈️','🦷','🐶'];
+let sd=null; // borrador
+function newDraft(){return {id:null,name:'',e:'📖',pages:[],fresh:[]}}
+function readSD(){if(!sd)return;const n=$('#sdName');if(n)sd.name=n.value;$$('[data-sdt]').forEach(i=>{const pg=sd.pages[+i.dataset.sdt];if(pg)pg.t=i.value});$$('[data-sde]').forEach(i=>{const pg=sd.pages[+i.dataset.sde];if(pg)pg.s=i.value})}
+function pHistorias(){
+  if(!sd)sd=newDraft();
+  return `<div class="cards">
+  <div class="card" style="grid-column:1/-1"><h3>${sd.id?'✏️ Editar historia':'➕ Nueva historia'}</h3>
+    <div class="sub">Crea historias con fotos reales: su cole, su profe, la casa de los abuelos, el dentista… Se ven como vídeo, con voz.</div>
+    <label class="f">Título</label><input class="inp" id="sdName" value="${esc(sd.name)}" placeholder="ej. Mi cole nuevo">
+    <label class="f">Dibujo de la portada (si la primera escena no tiene foto)</label>
+    <div class="checks">${STORY_ICONS.map(e=>`<button class="ck ${sd.e===e?'on':''}" data-sdi="${e}" style="font-size:22px">${e}</button>`).join('')}</div>
+    <label class="f">Escenas (${sd.pages.length})</label>
+    ${sd.pages.map((pg,i)=>`<div class="scrow">${pg.img&&imgSrc(pg.img)?`<img class="thumb" src="${imgSrc(pg.img)}" alt="">`:`<input class="inp thumbE" data-sde="${i}" value="${esc(pg.s||'')}" placeholder="😀" style="text-align:center">`}
+      <input class="inp" data-sdt="${i}" value="${esc(pg.t||'')}" placeholder="Frase de la escena ${i+1}">
+      <button class="btn alt sm" data-sdu="${i}" ${i===0?'disabled':''}>↑</button><button class="btn alt sm" data-sdd="${i}" ${i===sd.pages.length-1?'disabled':''}>↓</button><button class="btn danger sm" data-sdx="${i}">✕</button></div>`).join('')||'<p class="muted">Añade la primera escena con una foto o con dibujos.</p>'}
+    <label class="f">Añadir escena</label>
+    <div class="btnrow" style="justify-content:flex-start">${pickButtons('sd').replace('<div class="btnrow" style="justify-content:flex-start">','').replace(/<\/div>$/,'')}
+      <button class="btn alt" id="sdEmoji">😀 Sin foto (dibujos)</button></div>
+    <div class="btnrow" style="justify-content:flex-start;margin-top:16px">
+      <button class="btn" id="sdSave">💾 Guardar historia</button>
+      ${sd.pages.length?'<button class="btn alt" id="sdPlay">▶ Probar</button>':''}
+      ${sd.id||sd.pages.length||sd.name?'<button class="btn alt" id="sdCancel">Cancelar</button>':''}</div>
+  </div>
+  <div class="card" style="grid-column:1/-1"><h3>📚 Mis historias (${S.mystories.length})</h3><div class="sub">Las ven todos los usuarios, en Historias → “Mis historias”</div>
+    ${S.mystories.map(m=>`<div class="entry" style="align-items:center">${(()=>{const p0=normPage(m.pages[0]||{});return p0.img&&imgSrc(p0.img)?`<img class="thumb" src="${imgSrc(p0.img)}" alt="">`:`<span class="thumbE">${m.e}</span>`})()}
+      <div class="t">${esc(m.name)}<div class="d">${m.pages.length} escenas</div></div>
+      <button class="btn alt sm" data-msp="${m.id}">▶</button><button class="btn alt sm" data-mse="${m.id}">Editar</button><button class="btn danger sm" data-msx="${m.id}">Borrar</button></div>`).join('')||'<p class="muted">Todavía no has creado ninguna.</p>'}
+  </div></div>`;
+}
+function playStory(id){S.story={id,page:0,playing:S.cfg.storyAuto!==false,tok:0,ended:false};go('story');setTimeout(playPage,400)}
+function bHistorias(keep){
+  $$('[data-sdi]').forEach(b=>b.onclick=()=>{readSD();sd.e=b.dataset.sdi;keep()});
+  bindPick('sd',async f=>{readSD();if(sd.pages.length>=20){toast('Máximo 20 escenas');return}
+    try{const d=await readImage(f,720,false);const k=await saveImg(d);sd.fresh.push(k);sd.pages.push({img:k,s:'',t:''});keep();
+      setTimeout(()=>{const i=$(`[data-sdt="${sd.pages.length-1}"]`);if(i)i.focus()},50)}catch(e){toast('No se pudo leer la imagen')}});
+  $('#sdEmoji').onclick=()=>{readSD();if(sd.pages.length>=20){toast('Máximo 20 escenas');return}sd.pages.push({img:null,s:'',t:''});keep()};
+  $$('[data-sdu]').forEach(b=>b.onclick=()=>{readSD();const i=+b.dataset.sdu;[sd.pages[i-1],sd.pages[i]]=[sd.pages[i],sd.pages[i-1]];keep()});
+  $$('[data-sdd]').forEach(b=>b.onclick=()=>{readSD();const i=+b.dataset.sdd;[sd.pages[i+1],sd.pages[i]]=[sd.pages[i],sd.pages[i+1]];keep()});
+  $$('[data-sdx]').forEach(b=>b.onclick=()=>{readSD();const i=+b.dataset.sdx;const [pg]=sd.pages.splice(i,1);if(pg&&pg.img&&sd.fresh.includes(pg.img))dropImg(pg.img);keep()});
+  $('#sdSave').onclick=()=>{readSD();const name=sd.name.trim();
+    const pages=sd.pages.map(p=>({img:p.img||null,s:(p.s||'').trim(),t:(p.t||'').trim()})).filter(p=>p.t||p.img||p.s);
+    if(!name){toast('Pon un título a la historia');return}
+    if(!pages.length){toast('Añade al menos una escena');return}
+    if(pages.some(p=>!p.t)){toast('Escribe una frase en cada escena');return}
+    const old=sd.id?S.mystories.find(m=>m.id===sd.id):null;
+    if(old){const keepImgs=new Set(pages.map(p=>p.img));old.pages.forEach(p=>{if(p.img&&!keepImgs.has(p.img))dropImg(p.img)});Object.assign(old,{name,e:sd.e,pages})}
+    else S.mystories.push({id:'m'+uid(),name,e:sd.e,pages});
+    Store.save();sd=newDraft();toast('Historia guardada ✓');keep()};
+  const pl=$('#sdPlay');if(pl)pl.onclick=()=>{readSD();const tmp={id:'__draft',name:sd.name||'Prueba',e:sd.e,pages:sd.pages.map(p=>({img:p.img,s:p.s,t:p.t||'…'}))};
+    S.mystories=S.mystories.filter(m=>m.id!=='__draft');S.mystories.push(tmp);playStory('__draft');};
+  const cn=$('#sdCancel');if(cn)cn.onclick=()=>{sd.fresh.forEach(k=>{const used=S.mystories.some(m=>m.pages.some(p=>p.img===k));if(!used)dropImg(k)});sd=newDraft();keep()};
+  $$('[data-msp]').forEach(b=>b.onclick=()=>playStory(b.dataset.msp));
+  $$('[data-mse]').forEach(b=>b.onclick=()=>{const m=S.mystories.find(x=>x.id===b.dataset.mse);if(!m)return;sd={id:m.id,name:m.name,e:m.e,pages:clone(m.pages),fresh:[]};window.scrollTo(0,0);render()});
+  $$('[data-msx]').forEach(b=>b.onclick=()=>{const m=S.mystories.find(x=>x.id===b.dataset.msx);if(!m)return;
+    confirmBox(`Se borrará la historia “${m.name}” y sus fotos.`,()=>{m.pages.forEach(p=>dropImg(p.img));S.mystories=S.mystories.filter(x=>x.id!==m.id);Store.save();keep()})});
 }
 function exportBackup(){
   Store.flushAll();Store.cacheLocal();
-  const data={app:'ComprenTEA',v:1,ts:Date.now(),common:{custom:S.custom,profiles:S.profiles},profiles:{}};
+  const used=new Set(S.mystories.flatMap(m=>m.pages.map(p=>p.img)).filter(Boolean));const imgs={};used.forEach(k=>{if(S.imgs[k])imgs[k]=S.imgs[k]});
+  const data={app:'ComprenTEA',v:2,ts:Date.now(),common:{custom:S.custom,profiles:S.profiles,mystories:S.mystories.filter(m=>m.id!=='__draft')},imgs,profiles:{}};
   S.profiles.forEach(p=>{data.profiles[p.id]=p.id===S.pid?{cfg:S.cfg,days:S.days,diary:S.diary}:(lsGet(KEYS.profile(p.id))||null)});
   try{const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);a.download=`comprentea-copia-${dkey()}.json`;document.body.appendChild(a);a.click();
@@ -1040,6 +1199,7 @@ function importBackup(file){
     if(!d||d.app!=='ComprenTEA'||!d.common||!d.profiles){toast('Ese archivo no es una copia de ComprenTEA');return}
     confirmBox('Se reemplazarán los datos de este dispositivo por los de la copia.',async()=>{
       lsSet('comprentea-common',d.common);
+      for(const [k,v] of Object.entries(d.imgs||{})){await IDB.put(k,v)}
       Object.entries(d.profiles).forEach(([pid,v])=>{if(v)lsSet(KEYS.profile(pid),v)});
       const first=(d.common.profiles||[])[0];lsSet(KEYS.active,first?first.id:'main');
       S.loaded=false;render();await Store.init();
@@ -1067,7 +1227,7 @@ function buildReport(){
   const P=pictosSince(30);const pc={};P.forEach(p=>{pc[p.w]=(pc[p.w]||0)+1});
   L.push('',`COMUNICACIÓN: ${P.length} pictos pulsados.${P.length?' Más usados: '+Object.entries(pc).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([w,n])=>w+' ('+n+')').join(', ')+'.':''}`);
   const SV=Object.values(S.days).flatMap(d=>d.stories||[]).filter(x=>x.ts>=Date.now()-30*864e5);
-  if(SV.length){const sc={};SV.forEach(x=>{const st=STORIES.find(y=>y.id===x.id);const n=st?st.name:x.id;sc[n]=(sc[n]||0)+1});
+  if(SV.length){const sc={};SV.forEach(x=>{const st=allStories().find(y=>y.id===x.id);const n=st?st.name:x.id;sc[n]=(sc[n]||0)+1});
     L.push('',`HISTORIAS: ${SV.length} vistas. ${Object.entries(sc).sort((a,b)=>b[1]-a[1]).map(([n,c])=>n+' ('+c+')').join(', ')}.`)}
   const dp=diaryPatterns(30);
   L.push('','DIARIO DE LOS PADRES:');

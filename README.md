@@ -26,7 +26,8 @@ Las apps de comunicación aumentativa ayudan al niño a expresarse, pero casi ni
   - 👂 *Escuchar*: solo se oye la palabra (comprensión del lenguaje).
 - **Dificultad adaptativa:** el número de opciones sube tras 3 aciertos seguidos y baja tras 2 fallos. Además hay 4 niveles (Fácil, Medio, Difícil y Experto). El nivel Experto incluye retos: sumas, sonidos de animales, colores de objetos, formas de colores y situaciones emocionales.
 - **Aprendizaje sin error:** al fallar no hay sonidos ni colores de alarma; la opción incorrecta se aclara y la correcta se resalta.
-- **Historias sociales en modo vídeo:** se reproducen solas, con narración, escenas que aparecen poco a poco y paso automático (o paso a paso, a elegir). Temas: lavarse las manos, si un niño me empuja, separarse de los padres al ir al cole, el ruido y las emociones.
+- **Historias sociales en modo vídeo:** se reproducen solas, con narración, escenas que aparecen poco a poco y paso automático (o paso a paso). 13 historias en 4 bloques: convivir (no pegar, no morder, esperar el turno, compartir, si me empujan), emociones, rutinas y salidas (médico, peluquería, ir al cole).
+- **Mis historias:** las familias crean sus propias historias con **fotos de la galería o de la cámara** (su cole, su profe, la casa de los abuelos…).
 - **Rutina visual** "Ahora / Después" y un **rincón de calma** con respiración guiada.
 
 ### Para la familia (área protegida: mantener pulsado 2 s)
@@ -52,7 +53,8 @@ Las apps de comunicación aumentativa ayudan al niño a expresarse, pero casi ni
 | Instalación y modo sin conexión | Web App Manifest, Service Worker, Cache API |
 | Voz | Web Speech API (`speechSynthesis`, voz es-ES) |
 | Sonido | Web Audio API (tono suave generado, sin archivos de audio) |
-| Datos | `localStorage`, exportación/importación JSON |
+| Datos | `localStorage`, IndexedDB (fotos), exportación/importación JSON |
+| Imágenes | Canvas API (redimensionado y compresión en el dispositivo) |
 | Gráficos | SVG generado en el propio código |
 | Publicación | GitHub Pages |
 
