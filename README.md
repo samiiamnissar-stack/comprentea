@@ -21,14 +21,17 @@ Las apps de comunicación aumentativa ayudan al niño a expresarse, pero casi ni
 
 ### Para el niño
 - **Hablar:** tablero de pictogramas por categorías (necesito, siento, comida, jugar, personas) con voz en español y una tira para formar frases cortas. Permite añadir **fotos reales** (familia, objetos propios).
-- **Jugar:** 6 juegos de comprensión (colores, animales, números, contar, formas y emociones) con dos modos:
+- **Jugar:** 7 juegos de comprensión (colores, animales, números, contar, formas, emociones y sombras) con dos modos:
   - 👀 *Buscar igual*: emparejar la imagen (percepción).
   - 👂 *Escuchar*: solo se oye la palabra (comprensión del lenguaje).
 - **Dificultad adaptativa:** el número de opciones sube tras 3 aciertos seguidos y baja tras 2 fallos. Además hay 4 niveles (Fácil, Medio, Difícil y Experto). El nivel Experto incluye retos: sumas, sonidos de animales, colores de objetos, formas de colores y situaciones emocionales.
 - **Aprendizaje sin error:** al fallar no hay sonidos ni colores de alarma; la opción incorrecta se aclara y la correcta se resalta.
 - **Historias sociales en modo vídeo:** se reproducen solas, con narración, escenas que aparecen poco a poco y paso automático (o paso a paso). 13 historias en 4 bloques: convivir (no pegar, no morder, esperar el turno, compartir, si me empujan), emociones, rutinas y salidas (médico, peluquería, ir al cole).
+- **Puzle** de 2 a 9 piezas (según el nivel) con las fotos de la familia o con dibujos.
 - **Mis historias:** las familias crean sus propias historias con **fotos de la galería o de la cámara** (su cole, su profe, la casa de los abuelos…).
-- **Rutina visual** "Ahora / Después" y un **rincón de calma** con respiración guiada.
+- **Rutina visual** "Ahora / Después" y modo **Primero / Después** con dos tarjetas grandes.
+- **Esperar:** temporizador visual (un círculo que se vacía) con lo que viene después, para las transiciones.
+- **Calma:** *termómetro de emociones* (bien / nervioso / muy enfadado) con propuestas de ayuda (respirar, auriculares, abrazo…) que se registran en el diario, y respiración guiada.
 
 ### Para la familia (área protegida: mantener pulsado 2 s)
 - Resumen de uso, % de acierto a la primera, tiempo de respuesta y evolución de 14 días.
@@ -36,7 +39,8 @@ Las apps de comunicación aumentativa ayudan al niño a expresarse, pero casi ni
 - **Diario** de observaciones (vídeos que repite, conductas repetitivas, crisis con desencadenante y lo que ayudó, sonidos nuevos…) con detección de **patrones**.
 - **Informe** de texto listo para enviar al profesional.
 - **Varios usuarios**, cada uno con sus datos, su rutina y su nivel.
-- **Copia de seguridad** (exportar/importar en JSON) para pasar los datos a otro dispositivo.
+- **Voz de la familia:** los padres pueden grabar su voz para las palabras, frases de los juegos y escenas de las historias. Lo que no se graba usa la voz del dispositivo (que también se puede elegir).
+- **Copia de seguridad** (exportar/importar en JSON, con fotos y grabaciones) para pasar los datos a otro dispositivo.
 
 ## Decisiones de diseño
 
@@ -51,9 +55,9 @@ Las apps de comunicación aumentativa ayudan al niño a expresarse, pero casi ni
 |---|---|
 | Interfaz | HTML5, CSS3 (Grid, variables CSS), JavaScript (ES2020) |
 | Instalación y modo sin conexión | Web App Manifest, Service Worker, Cache API |
-| Voz | Web Speech API (`speechSynthesis`, voz es-ES) |
+| Voz | Web Speech API (`speechSynthesis`, voz es-ES), MediaRecorder + getUserMedia (grabaciones de los padres) |
 | Sonido | Web Audio API (tono suave generado, sin archivos de audio) |
-| Datos | `localStorage`, IndexedDB (fotos), exportación/importación JSON |
+| Datos | `localStorage`, IndexedDB (fotos y audios), exportación/importación JSON |
 | Imágenes | Canvas API (redimensionado y compresión en el dispositivo) |
 | Gráficos | SVG generado en el propio código |
 | Publicación | GitHub Pages |
