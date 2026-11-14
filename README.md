@@ -26,7 +26,7 @@ Las apps de comunicación aumentativa ayudan al niño a expresarse, pero casi ni
   - 👂 *Escuchar*: solo se oye la palabra (comprensión del lenguaje).
 - **Dificultad adaptativa:** el número de opciones sube tras 3 aciertos seguidos y baja tras 2 fallos. Además hay 4 niveles (Fácil, Medio, Difícil y Experto). El nivel Experto incluye retos: sumas, sonidos de animales, colores de objetos, formas de colores y situaciones emocionales.
 - **Aprendizaje sin error:** al fallar no hay sonidos ni colores de alarma; la opción incorrecta se aclara y la correcta se resalta.
-- **Historias sociales** narradas paso a paso (lavarse las manos, si un niño me empuja, separarse de los padres al ir al cole, el ruido, las emociones).
+- **Historias sociales en modo vídeo:** se reproducen solas, con narración, escenas que aparecen poco a poco y paso automático (o paso a paso, a elegir). Temas: lavarse las manos, si un niño me empuja, separarse de los padres al ir al cole, el ruido y las emociones.
 - **Rutina visual** "Ahora / Después" y un **rincón de calma** con respiración guiada.
 
 ### Para la familia (área protegida: mantener pulsado 2 s)

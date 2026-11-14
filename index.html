@@ -131,13 +131,23 @@ button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none
 .scene img{width:200px;height:200px;object-fit:cover;border-radius:22px}
 .stext{font-size:30px;font-weight:900;text-align:center;max-width:760px;line-height:1.3}
 .snav{display:flex;gap:16px;align-items:center}
-.snav .bigbtn{min-width:120px}
+.snav .bigbtn{min-width:120px;font-size:32px;line-height:1}
 .sdots{display:flex;gap:8px}.sdots i{width:14px;height:14px;border-radius:50%;background:#E6DED0}.sdots i.on{background:var(--teal)}
+.scene.kb{animation:kenburns 9s ease-in-out both}
+@keyframes kenburns{from{transform:scale(1)}to{transform:scale(1.07)}}
+.pop{display:inline-block;animation:popin .8s ease-out both}
+@keyframes popin{from{opacity:0;transform:translateY(18px) scale(.85)}to{opacity:1;transform:none}}
+.fadein{animation:fadein .7s .3s ease-out both}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.sbar{width:min(560px,92vw);height:8px;border-radius:6px;background:#E6DED0;overflow:hidden}
+.sbar i{display:block;height:100%;background:var(--teal);transition:width .6s ease}
 /* modo sin animaciones */
 body.still .opt.help{animation:none;border-width:6px}
 body.still .opt.right{transform:none}
 body.still .tile:active,body.still .picto:active,body.still .opt:active{transform:none}
 body.still .rcard.now{transform:none}
+body.still .scene.kb{animation:none}
+body.still .pop{animation-name:fadein}
 /* área de padres */
 .ptabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .ptabs button{padding:12px 18px;border-radius:14px;font-weight:900;font-size:16px;background:var(--card);border:2px solid var(--line)}
@@ -324,7 +334,7 @@ const DIARY_TYPES = [
 ];
 
 const DEFAULT_CFG = {
-  childName:'', voice:true, sound:true, softColors:true, motion:false, rate:0.9, volume:0.8, difficulty:1, allowLevelUp:true,
+  childName:'', voice:true, sound:true, softColors:true, motion:false, storyAuto:true, rate:0.9, volume:0.8, difficulty:1, allowLevelUp:true,
   modes:{colores:'igual',animales:'igual',numeros:'igual',contar:'contar',formas:'igual',emociones:'igual'},
   levels:{}, enabled:{}, routine:['bano','comer','peluche','dormir'],
 };
@@ -426,7 +436,7 @@ async function switchProfile(pid,screen='home'){
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')Store.flushAll()});
 
 /* ============ NAVEGACIÓN ============ */
-function go(screen,extra){S.screen=screen;if(extra)Object.assign(S,extra);if(screen!=='game'&&S.game){clearTimeout(S.game.idle);S.game=null}render();window.scrollTo(0,0)}
+function go(screen,extra){if(S.screen==='story'&&screen!=='story')stopStory();S.screen=screen;if(extra)Object.assign(S,extra);if(screen!=='game'&&S.game){clearTimeout(S.game.idle);S.game=null}render();window.scrollTo(0,0)}
 function backBtn(to='home'){return `<button class="iconbtn" data-go="${to}" aria-label="Volver">⬅️</button>`}
 function render(){
   const app=$('#app');
@@ -698,24 +708,64 @@ const STORIES = [
 ];
 function vStories(){
   return `<div class="top">${backBtn()}<h1>Historias</h1></div>
-  <div class="games">${STORIES.map(st=>`<button class="gtile t-sky" data-st="${st.id}"><span class="big">${st.e}</span>${st.name}<small>${st.pages.length} páginas</small></button>`).join('')}</div>`;
+  <div class="games">${STORIES.map(st=>`<button class="gtile t-sky" data-st="${st.id}"><span class="big">${st.e}</span>${st.name}<small>▶ ${st.pages.length} escenas</small></button>`).join('')}</div>`;
 }
-function bStories(){$$('[data-st]').forEach(b=>b.onclick=()=>{S.story={id:b.dataset.st,page:0};today().stories=today().stories||[];today().stories.push({id:b.dataset.st,ts:Date.now()});Store.saveDay();go('story');setTimeout(()=>speakPage(),300)})}
+function bStories(){$$('[data-st]').forEach(b=>b.onclick=()=>{
+  S.story={id:b.dataset.st,page:0,playing:S.cfg.storyAuto!==false,tok:0,ended:false};
+  today().stories=today().stories||[];today().stories.push({id:b.dataset.st,ts:Date.now()});Store.saveDay();
+  go('story');setTimeout(playPage,400)})}
 function curStory(){return STORIES.find(x=>x.id===(S.story||{}).id)}
-function speakPage(){const st=curStory();if(st)speak(st.pages[S.story.page][1])}
+function graphemes(s){try{return Array.from(new Intl.Segmenter('es',{granularity:'grapheme'}).segment(s),x=>x.segment)}catch(e){return Array.from(s)}}
+function speakThen(text,cb){
+  let done=false;const est=1300+text.length*80/(S.cfg.rate||1);
+  const fin=()=>{if(done)return;done=true;clearTimeout(t);cb&&cb()};
+  const t=setTimeout(fin,est+5000);
+  if(!S.cfg.voice||!nativeOK){clearTimeout(t);setTimeout(fin,est);return}
+  try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='es-ES';if(esVoice)u.voice=esVoice;u.rate=S.cfg.rate;u.pitch=1.05;u.volume=S.cfg.volume;
+    u.onend=fin;u.onerror=fin;speechSynthesis.speak(u)}catch(e){fin()}
+}
+function stopStory(){if(S.story){S.story.tok++;clearTimeout(S.story.timer)}try{speechSynthesis.cancel()}catch(e){}}
+function playPage(){
+  const s=S.story,st=curStory();if(!s||!st||S.screen!=='story')return;
+  const tok=++s.tok;clearTimeout(s.timer);
+  speakThen(st.pages[s.page][1],()=>{
+    if(!S.story||S.story.tok!==tok||!S.story.playing||S.screen!=='story')return;
+    s.timer=setTimeout(()=>{
+      if(!S.story||S.story.tok!==tok||!S.story.playing)return;
+      if(s.page<st.pages.length-1){s.page++;render();playPage()}
+      else{s.ended=true;s.playing=false;chime();render()}
+    },1400);
+  });
+}
 function vStory(){
-  const st=curStory();if(!st)return vStories();
-  const i=S.story.page,[scene,text]=st.pages[i],last=i===st.pages.length-1;
-  return `<div class="top">${backBtn('stories')}<h1>${st.name}</h1><button class="iconbtn" id="srep" aria-label="Leer otra vez">🔊</button></div>
-  <div class="story"><div class="scene">${scene}</div><div class="stext">${esc(text)}</div>
-  <div class="sdots">${st.pages.map((_,j)=>`<i class="${j<=i?'on':''}"></i>`).join('')}</div>
-  <div class="snav"><button class="bigbtn alt" id="sprev" ${i===0?'style="visibility:hidden"':''}>◀</button>
-  ${last?`<button class="bigbtn" data-go="stories">✓ Fin</button>`:`<button class="bigbtn" id="snext">▶</button>`}</div></div>`;
+  const s=S.story,st=curStory();if(!st)return vStories();
+  if(s.ended){
+    return `<div class="top">${backBtn('stories')}<h1>${st.name}</h1></div>
+    <div class="done"><div class="stars">${st.e}</div><h2>¡Fin!</h2>
+    <div class="btnrow"><button class="bigbtn" id="sagain">🔁 Ver otra vez</button><button class="bigbtn alt" data-go="stories">📖 Otra historia</button></div></div>`;
+  }
+  const i=s.page,[scene,text]=st.pages[i];
+  const pieces=graphemes(scene).filter(g=>g.trim());
+  const pct=Math.round(100*(i+1)/st.pages.length);
+  return `<div class="top">${backBtn('stories')}<h1>${st.name}</h1><button class="iconbtn" id="srep" aria-label="Repetir escena">🔊</button></div>
+  <div class="story">
+    <div class="scene kb" key="${i}">${pieces.map((g,j)=>`<span class="pop" style="animation-delay:${.15+j*.55}s">${g}</span>`).join('')}</div>
+    <div class="stext fadein">${esc(text)}</div>
+    <div class="sbar"><i style="width:${pct}%"></i></div>
+    <div class="snav">
+      <button class="bigbtn alt" id="sprev" ${i===0?'style="visibility:hidden"':''} aria-label="Escena anterior">⏮</button>
+      <button class="bigbtn" id="splay" aria-label="${s.playing?'Pausa':'Reproducir'}">${s.playing?'⏸':'▶'}</button>
+      <button class="bigbtn alt" id="snext" aria-label="Escena siguiente">⏭</button>
+    </div>
+  </div>`;
 }
 function bStory(){
-  const r=$('#srep');if(r)r.onclick=speakPage;
-  const n=$('#snext');if(n)n.onclick=()=>{S.story.page++;render();speakPage()};
-  const p=$('#sprev');if(p)p.onclick=()=>{if(S.story.page>0){S.story.page--;render();speakPage()}};
+  const s=S.story,st=curStory();
+  const a=$('#sagain');if(a){a.onclick=()=>{s.page=0;s.ended=false;s.playing=true;render();playPage()};return}
+  $('#srep').onclick=()=>{s.playing=false;stopStory();render();speak(st.pages[s.page][1])};
+  $('#splay').onclick=()=>{s.playing=!s.playing;if(s.playing){render();playPage()}else{stopStory();render()}};
+  $('#snext').onclick=()=>{stopStory();if(s.page<st.pages.length-1){s.page++;render();if(s.playing)playPage();else speak(st.pages[s.page][1])}else{s.ended=true;s.playing=false;render()}};
+  const p=$('#sprev');if(p)p.onclick=()=>{stopStory();if(s.page>0){s.page--;render();if(s.playing)playPage();else speak(st.pages[s.page][1])}};
 }
 
 /* ============ ANÁLISIS ============ */
@@ -872,6 +922,7 @@ function pAjustes(){
   </div>
   <div class="card"><h3>🌿 Sensorial</h3><div class="sub">Para que la pantalla estimule lo menos posible</div>
     <label class="f">Colores del juego</label><div class="seg"><button data-set="softColors:1" class="${c.softColors!==false?'on':''}">Suaves</button><button data-set="softColors:0" class="${c.softColors===false?'on':''}">Intensos</button></div>
+    <label class="f">Historias</label><div class="seg"><button data-set="storyAuto:1" class="${c.storyAuto!==false?'on':''}">Como vídeo (automático)</button><button data-set="storyAuto:0" class="${c.storyAuto===false?'on':''}">Paso a paso</button></div>
     <label class="f">Movimiento (pulsos, zoom)</label><div class="seg"><button data-set="motion:0" class="${!c.motion?'on':''}">Quieto</button><button data-set="motion:1" class="${c.motion?'on':''}">Con movimiento</button></div>
     <p class="muted" style="font-size:13px">Sin destellos, sin sonidos de error y sin rojo para avisar de un fallo: al equivocarse, la opción se aclara y la correcta se marca.</p>
   </div>
